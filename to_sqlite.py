@@ -3,8 +3,8 @@ import json
 import sqlite3
 
 # Path where your JSON files are stored
-DATA_FOLDER = "data/test_matches"
-DB_FILE = "test_matches.db"
+DATA_FOLDER = os.path.join(os.path.dirname(__file__), "data", "test_matches")
+DB_FILE = os.path.join(os.path.dirname(__file__), "test_matches.db")
 
 def create_table(conn):
     conn.execute("""
@@ -51,7 +51,13 @@ def parse_match(file_path):
                 batter = delivery.get("batter")
                 bowler = delivery.get("bowler")
                 runs = delivery.get("runs", {})
-                dismissal = 1 if delivery.get("wickets") else 0
+                
+                # ✅ Count dismissal only if this batter got out
+                dismissal = 0
+                for w in delivery.get("wickets", []):
+                    if w.get("player_out") == batter:
+                        dismissal = 1
+                        break
 
                 records.append({
                     "match_id": match_id,
