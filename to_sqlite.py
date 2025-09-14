@@ -1,10 +1,11 @@
+# to_sqlite.py
 import os
 import json
 import sqlite3
 
-# Paths
 DATA_FOLDER = os.path.join(os.path.dirname(__file__), "data", "test_matches")
 DB_FILE = os.path.join(os.path.dirname(__file__), "test_matches.db")
+BATCH_SIZE = 100  # insert 100 deliveries at a time
 
 def create_table(conn):
     conn.execute("""
@@ -23,21 +24,13 @@ def create_table(conn):
     """)
     conn.commit()
 
-def insert_records(conn, records):
-    if not records:
-        return
+def insert_batch(conn, batch):
     conn.executemany("""
         INSERT INTO deliveries (
             match_id, venue, team, batter, bowler,
             runs_batter, runs_extras, runs_total, dismissal
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, [
-        (
-            r["match_id"], r["venue"], r["team"], r["batter"], r["bowler"],
-            r["runs_batter"], r["runs_extras"], r["runs_total"], r["dismissal"]
-        )
-        for r in records
-    ])
+    """, batch)
     conn.commit()
 
 def parse_match(file_path):
@@ -45,7 +38,7 @@ def parse_match(file_path):
         match = json.load(f)
 
     match_id = os.path.basename(file_path).replace(".json", "")
-    venue = match.get("info", {}).get("venue", "Unknown")
+    venue = match["info"].get("venue", "Unknown")
 
     records = []
     for innings in match.get("innings", []):
@@ -55,41 +48,37 @@ def parse_match(file_path):
                 batter = delivery.get("batter")
                 bowler = delivery.get("bowler")
                 runs = delivery.get("runs", {})
+                dismissal = 1 if delivery.get("wickets") else 0
 
-                # Only count dismissal if this batter got out
-                dismissal = 0
-                for w in delivery.get("wickets", []):
-                    if w.get("player_out") == batter:
-                        dismissal = 1
-                        break
-
-                records.append({
-                    "match_id": match_id,
-                    "venue": venue,
-                    "team": team,
-                    "batter": batter,
-                    "bowler": bowler,
-                    "runs_batter": runs.get("batter", 0),
-                    "runs_extras": runs.get("extras", 0),
-                    "runs_total": runs.get("total", 0),
-                    "dismissal": dismissal
-                })
+                records.append((
+                    match_id, venue, team, batter, bowler,
+                    runs.get("batter", 0),
+                    runs.get("extras", 0),
+                    runs.get("total", 0),
+                    dismissal
+                ))
     return records
 
 def main():
     conn = sqlite3.connect(DB_FILE)
     create_table(conn)
 
-    json_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith(".json")]
-    total_files = len(json_files)
-    print(f"Found {total_files} JSON files. Processing in batches...")
-
-    for i, fname in enumerate(json_files, 1):
+    batch = []
+    for fname in os.listdir(DATA_FOLDER):
+        if not fname.endswith(".json"):
+            continue
         file_path = os.path.join(DATA_FOLDER, fname)
         records = parse_match(file_path)
-        insert_records(conn, records)
-        if i % 50 == 0 or i == total_files:
-            print(f"Processed {i}/{total_files} files")
+
+        for rec in records:
+            batch.append(rec)
+            if len(batch) >= BATCH_SIZE:
+                insert_batch(conn, batch)
+                batch = []
+
+    # insert any remaining records
+    if batch:
+        insert_batch(conn, batch)
 
     conn.close()
     print(f"✅ Done! All JSON data stored in {DB_FILE}")

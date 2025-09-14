@@ -1,7 +1,5 @@
+# bot/stats_engine.py
 from bot import data_loader
-
-# Load from SQLite DB
-df = data_loader.load_data("test_matches.db")
 
 def answer_query(parsed: dict) -> str:
     player = parsed.get("player")
@@ -12,14 +10,8 @@ def answer_query(parsed: dict) -> str:
     if not player:
         return "Sorry, I couldn’t recognize the player."
 
-    # Filter player (case insensitive)
-    player_df = df[df["batter"].str.lower() == player.lower()]
-
-    if bowler:
-        player_df = player_df[player_df["bowler"].str.lower() == bowler.lower()]
-
-    if venue:
-        player_df = player_df[player_df["venue"].str.contains(venue, case=False, na=False)]
+    # Fetch only relevant data from SQLite
+    player_df = data_loader.fetch_player_data(player, bowler, venue)
 
     if player_df.empty:
         details = []
@@ -47,10 +39,8 @@ def answer_query(parsed: dict) -> str:
     
     elif metric == "runs":
         text = f"{player} scored {runs} runs"
-        if venue:
-            text += f" at {venue}"
-        if bowler:
-            text += f" against {bowler}"
+        if venue: text += f" at {venue}"
+        if bowler: text += f" against {bowler}"
         return text + "."
     
     elif metric == "wickets" and bowler:
