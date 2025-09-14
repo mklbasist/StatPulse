@@ -5,7 +5,7 @@ from rapidfuzz import process
 from bot import data_loader
 
 # Load all match data once
-df = data_loader.load_data("test_matches.db")
+df = data_loader.load_data()  # no argument needed
 
 # Dynamic player + venue lists
 PLAYERS = df["batter"].unique().tolist() + df["bowler"].unique().tolist()
