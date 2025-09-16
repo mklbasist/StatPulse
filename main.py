@@ -24,6 +24,7 @@ def debug_parse(q: Question):
     parsed = nlp_parser.parse_query(q.question)
     return {"parsed": parsed}
 
+
 if __name__ == "__main__":
     # Use Render's PORT environment variable, fallback to 8000 for local testing
     port = int(os.environ.get("PORT", 8000))

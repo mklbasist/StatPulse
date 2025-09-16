@@ -1,22 +1,28 @@
-import os
 import sqlite3
 import pandas as pd
-import subprocess
+import os
 
 DB_FILE = os.path.join(os.path.dirname(__file__), "..", "test_matches.db")
-JSON_FOLDER = os.path.join(os.path.dirname(__file__), "..", "data/test_matches")
 
-def load_data() -> pd.DataFrame:
-    # If DB doesn't exist, generate it from JSON
-    if not os.path.exists(DB_FILE):
-        print("Database not found. Creating from JSON files...")
-        subprocess.run(["python", os.path.join(os.path.dirname(__file__), "..", "to_sqlite.py")], check=True)
-
+def fetch_player_data(player=None, bowler=None, venue=None):
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM deliveries", conn)
+    query = "SELECT * FROM deliveries WHERE 1=1"
+    params = []
+
+    if player:
+        query += " AND LOWER(batter)=?"
+        params.append(player.lower())
+    if bowler:
+        query += " AND LOWER(bowler)=?"
+        params.append(bowler.lower())
+    if venue:
+        query += " AND venue LIKE ?"
+        params.append(f"%{venue}%")
+
+    df = pd.read_sql_query(query, conn, params=params)
     conn.close()
 
-    if not df.empty:
-        df["dismissal"] = df["dismissal"].astype(int)
+    if not df.empty and "dismissal" in df.columns:
+        df["dismissal"] = df["dismissal"].fillna(0).astype(int)
 
     return df

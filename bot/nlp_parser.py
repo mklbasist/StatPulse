@@ -1,44 +1,52 @@
+import re
+import spacy
+from rapidfuzz import process
 from bot import data_loader
 
-def answer_query(parsed: dict) -> str:
-    player = parsed.get("player")
-    bowler = parsed.get("bowler")
-    venue = parsed.get("venue")
-    metric = parsed.get("metric")
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
 
-    if not player:
-        return "Sorry, I couldn’t recognize the player."
+# Metric keywords
+METRICS = {
+    "average": ["average", "avg", "batting avg"],
+    "strike_rate": ["strike rate", "sr"],
+    "dismissals": ["dismissal", "out", "got out"],
+    "runs": ["run", "runs", "score", "scored"],
+    "wickets": ["wicket", "wickets", "took"]
+}
 
-    # Fetch only relevant data
-    player_df = data_loader.fetch_player_data(player, bowler, venue)
+def clean_query(text: str) -> str:
+    text = re.sub(r"'s\b", "", text)
+    text = text.replace("’", "'")
+    return text.strip()
 
-    if player_df.empty:
-        details = []
-        if bowler: details.append(f"against {bowler}")
-        if venue: details.append(f"at {venue}")
-        return f"No data available for {player} {' '.join(details)}."
+def parse_query(query: str):
+    query = clean_query(query)
+    q_lower = query.lower()
+    doc = nlp(query)
 
-    runs = player_df["runs_batter"].sum()
-    dismissals = player_df["dismissal"].sum()
-    balls = len(player_df)
+    player, bowler, venue, metric = None, None, None, None
 
-    if metric == "average":
-        if dismissals == 0:
-            return f"{player} hasn’t been dismissed yet; average cannot be calculated."
-        avg = runs / dismissals
-        return f"{player} scored {runs} runs and was dismissed {dismissals} times, giving an average of {avg:.2f}."
-    elif metric == "strike_rate":
-        sr = (runs / balls) * 100 if balls > 0 else 0
-        return f"{player} scored {runs} runs in {balls} balls, strike rate {sr:.2f}."
-    elif metric == "dismissals":
-        return f"{player} was dismissed {dismissals} times."
-    elif metric == "runs":
-        text = f"{player} scored {runs} runs"
-        if venue: text += f" at {venue}"
-        if bowler: text += f" against {bowler}"
-        return text + "."
-    elif metric == "wickets" and bowler:
-        wkts = player_df["dismissal"].sum()
-        return f"{bowler} dismissed {player} {wkts} times."
-    else:
-        return f"I found {len(player_df)} deliveries for {player}."
+    # detect player vs bowler
+    if re.search(r"\b(against|vs|versus)\b", q_lower):
+        parts = re.split(r"\b(?:against|vs|versus)\b", query, flags=re.IGNORECASE, maxsplit=1)
+        if len(parts) == 2:
+            player = parts[0].strip()
+            bowler = parts[1].strip()
+
+    # fallback using NER
+    for ent in doc.ents:
+        if ent.label_ == "PERSON" and not player:
+            player = ent.text
+        elif ent.label_ == "PERSON" and not bowler:
+            bowler = ent.text
+        elif ent.label_ in ["GPE", "LOC", "ORG"] and not venue:
+            venue = ent.text
+
+    # metric detection
+    for key, keywords in METRICS.items():
+        if any(word in q_lower for word in keywords):
+            metric = key
+            break
+
+    return {"player": player, "bowler": bowler, "venue": venue, "metric": metric}

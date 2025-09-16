@@ -1,4 +1,3 @@
-# bot/stats_engine.py
 from bot import data_loader
 
 def answer_query(parsed: dict) -> str:
@@ -10,7 +9,7 @@ def answer_query(parsed: dict) -> str:
     if not player:
         return "Sorry, I couldn’t recognize the player."
 
-    # Fetch only relevant data from SQLite
+    # Fetch only relevant data from DB
     player_df = data_loader.fetch_player_data(player, bowler, venue)
 
     if player_df.empty:
@@ -23,29 +22,28 @@ def answer_query(parsed: dict) -> str:
     dismissals = player_df["dismissal"].sum()
     balls = len(player_df)
 
-    # Metrics
     if metric == "average":
         if dismissals == 0:
             return f"{player} hasn’t been dismissed yet; average cannot be calculated."
         avg = runs / dismissals
         return f"{player} scored {runs} runs and was dismissed {dismissals} times, giving an average of {avg:.2f}."
-    
+
     elif metric == "strike_rate":
         sr = (runs / balls) * 100 if balls > 0 else 0
         return f"{player} scored {runs} runs in {balls} balls, strike rate {sr:.2f}."
-    
+
     elif metric == "dismissals":
         return f"{player} was dismissed {dismissals} times."
-    
+
     elif metric == "runs":
         text = f"{player} scored {runs} runs"
         if venue: text += f" at {venue}"
         if bowler: text += f" against {bowler}"
         return text + "."
-    
+
     elif metric == "wickets" and bowler:
         wkts = player_df["dismissal"].sum()
         return f"{bowler} dismissed {player} {wkts} times."
-    
+
     else:
         return f"I found {len(player_df)} deliveries for {player}."
